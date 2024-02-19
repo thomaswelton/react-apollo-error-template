@@ -7,11 +7,18 @@ import {
   ApolloProvider,
   InMemoryCache,
   gql,
-  useQuery
+  useQuery, useFragment
 } from "@apollo/client";
 import { link } from "./link.js";
 import { Layout } from "./layout.jsx";
 import "./index.css";
+import {createFragmentRegistry} from "@apollo/client/cache";
+
+const NAME_FRAGMENT = gql`
+  fragment NameFragment on Playlist {
+    name
+  }
+`;
 
 const GET_PLAYLISTS = gql`
   query GetPlaylists {
@@ -20,7 +27,7 @@ const GET_PLAYLISTS = gql`
         node {
           id
           ... @defer {
-            name @nonreactive
+            ...NameFragment @nonreactive
           }
         }
       }
@@ -28,8 +35,20 @@ const GET_PLAYLISTS = gql`
   }
 `;
 
+const Playlist = ({id}) => {
+  const { data: node } = useFragment({
+    fragment: NAME_FRAGMENT,
+    from: {
+      __typename: "Playlist",
+      id,
+    },
+  });
+
+  return <li key={node.id}>{id} {node.name}</li>;
+};
+
 function App() {
-  const { loading, data } = useQuery(GET_PLAYLISTS);
+  const {loading, data} = useQuery(GET_PLAYLISTS);
 
   const [count, setCount] = useState(0);
 
@@ -51,7 +70,7 @@ function App() {
       ) : (
         <ul>
           {data?.featuredPlaylists.edges.map(({node}) => (
-            <li key={node.id}>{node.id} {node.name}</li>
+            <Playlist key={node.id} id={node.id} />
           ))}
         </ul>
       )}
@@ -60,8 +79,12 @@ function App() {
 }
 
 const client = new ApolloClient({
-  cache: new InMemoryCache(),
-  link
+  cache: new InMemoryCache({
+    fragments: createFragmentRegistry(gql`
+      ${NAME_FRAGMENT}
+    `),
+  }),
+  link,
 });
 
 const container = document.getElementById("root");
